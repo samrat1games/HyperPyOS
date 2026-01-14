@@ -1,4 +1,4 @@
-import sys, os, shutil
+import sys, os, shutil, importlib.util
 from pathlib import Path
 from PyQt6.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QFrame, QScrollArea, QWidget, QMessageBox, 
@@ -32,45 +32,54 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
-        # --- 1. SIDEBAR ---
+        # --- 1. SIDEBAR (Боковая панель) ---
         self.sidebar = QFrame()
         self.sidebar.setFixedWidth(180)
         self.sidebar.setStyleSheet("""
             QFrame { background-color: #f2f2f7; border-right: 1px solid #d1d1d6; }
             QPushButton { 
                 text-align: left; padding: 10px; border: none; 
-                color: #000000; font-size: 13px; background: transparent;
+                color: #000000; font-size: 13px; font-weight: bold; background: transparent;
             }
-            QPushButton:hover { background-color: #e5e5ea; }
+            QPushButton:hover { background-color: #e5e5ea; border-radius: 5px; }
         """)
         
         side_layout = QVBoxLayout(self.sidebar)
-        side_layout.setContentsMargins(5, 20, 5, 10)
+        side_layout.setContentsMargins(10, 15, 10, 15)
+        side_layout.setSpacing(5)
 
+        # Навигация
         self.add_side_btn(side_layout, "[ ROOT ]", self.base_path)
         self.add_side_btn(side_layout, "[ FILES ]", self.base_path / "files")
+        self.add_side_btn(side_layout, "[ SYSTEM ]", self.base_path / "files" / "HyperPyOS")
         
-        side_layout.addStretch()
+        # Разделитель
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("color: #d1d1d6;")
+        side_layout.addWidget(line)
 
-        # КНОПКИ СОЗДАНИЯ (Теперь с черным текстом)
-        action_btn_style = """
+        # КНОПКИ СОЗДАНИЯ (Теперь сверху и с черным текстом)
+        create_btn_style = """
             QPushButton { 
-                padding: 10px; border-radius: 6px; font-weight: bold; 
-                color: #000000; /* ЧЕРНЫЙ ТЕКСТ */
-                border: 1px solid rgba(0,0,0,0.1); 
+                background: #e5e5ea; border: 1px solid #c7c7cc; 
+                border-radius: 6px; padding: 8px; color: #000000;
             }
+            QPushButton:hover { background: #d1d1d6; }
         """
 
         self.btn_new_file = QPushButton("NEW FILE")
-        self.btn_new_file.setStyleSheet(action_btn_style + "background: #007aff;")
+        self.btn_new_file.setStyleSheet(create_btn_style)
         self.btn_new_file.clicked.connect(lambda: self.show_input_overlay("FILE"))
         
         self.btn_new_folder = QPushButton("NEW FOLDER")
-        self.btn_new_folder.setStyleSheet(action_btn_style + "background: #5856d6;")
+        self.btn_new_folder.setStyleSheet(create_btn_style)
         self.btn_new_folder.clicked.connect(lambda: self.show_input_overlay("FOLDER"))
         
         side_layout.addWidget(self.btn_new_file)
         side_layout.addWidget(self.btn_new_folder)
+        
+        side_layout.addStretch() # Пружина уходит вниз
         self.main_layout.addWidget(self.sidebar)
 
         # --- 2. CONTENT AREA ---
@@ -79,7 +88,7 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         self.right_layout.setContentsMargins(0, 0, 0, 0)
         
         toolbar = QFrame()
-        toolbar.setFixedHeight(50)
+        toolbar.setFixedHeight(45)
         toolbar.setStyleSheet("background: white; border-bottom: 1px solid #e0e0e0;")
         t_layout = QHBoxLayout(toolbar)
         
@@ -88,7 +97,7 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         self.back_btn.clicked.connect(self.go_back)
         
         self.path_lbl = QLabel("/")
-        self.path_lbl.setStyleSheet("font-family: 'Consolas'; color: #333; font-size: 12px;")
+        self.path_lbl.setStyleSheet("font-family: 'Consolas'; color: #333; font-size: 11px;")
         
         t_layout.addWidget(self.back_btn)
         t_layout.addWidget(self.path_lbl)
@@ -115,10 +124,10 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         self.overlay_bg.hide()
 
         self.input_panel = QFrame(self.content)
-        self.input_panel.setFixedSize(320, 160)
-        self.input_panel.move(290, 245)
+        self.input_panel.setFixedSize(320, 150)
+        self.input_panel.move(290, 250)
         self.input_panel.setStyleSheet("""
-            QFrame { background: #1c1c1e; border-radius: 15px; border: 1px solid #3a3a3c; }
+            QFrame { background: #1c1c1e; border-radius: 12px; border: 1px solid #3a3a3c; }
             QLabel { color: white; border: none; font-weight: bold; }
             QLineEdit { background: #2c2c2e; color: white; padding: 8px; border-radius: 6px; }
         """)
@@ -130,11 +139,11 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         
         btn_box = QHBoxLayout()
         ok_btn = QPushButton("OK")
-        ok_btn.setStyleSheet("background: #0a84ff; color: white; font-weight: bold; border-radius: 6px; padding: 6px;")
+        ok_btn.setStyleSheet("background: #0a84ff; color: white; font-weight: bold; padding: 5px; border-radius: 5px;")
         ok_btn.clicked.connect(self.process_input_overlay)
         
         cancel_btn = QPushButton("CANCEL")
-        cancel_btn.setStyleSheet("background: #3a3a3c; color: white; border-radius: 6px; padding: 6px;")
+        cancel_btn.setStyleSheet("background: #3a3a3c; color: white; padding: 5px; border-radius: 5px;")
         cancel_btn.clicked.connect(self.hide_overlay)
         
         btn_box.addWidget(cancel_btn)
@@ -144,16 +153,18 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         ip_layout.addWidget(self.ip_input)
         ip_layout.addLayout(btn_box)
 
+        # Редактор кода
         self.editor_panel = QFrame(self.content)
         self.editor_panel.setGeometry(50, 50, 800, 550)
-        self.editor_panel.setStyleSheet("background: #1e1e1e; border-radius: 12px; border: 2px solid #333;")
+        self.editor_panel.setStyleSheet("background: #1e1e1e; border-radius: 10px; border: 1px solid #333;")
         self.editor_panel.hide()
         
         ed_layout = QVBoxLayout(self.editor_panel)
         self.ed_text = QTextEdit()
-        self.ed_text.setStyleSheet("color: #d4d4d4; font-family: 'Consolas'; border: none; font-size: 14px;")
+        self.ed_text.setStyleSheet("color: #d4d4d4; font-family: 'Consolas'; border: none; font-size: 14px; background: transparent;")
+        
         self.ed_save_btn = QPushButton("SAVE AND CLOSE")
-        self.ed_save_btn.setStyleSheet("background: #28a745; color: white; padding: 10px; font-weight: bold;")
+        self.ed_save_btn.setStyleSheet("background: #28a745; color: white; padding: 10px; font-weight: bold; border-radius: 5px;")
         
         ed_layout.addWidget(self.ed_text)
         ed_layout.addWidget(self.ed_save_btn)
@@ -177,10 +188,9 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
                     self.refresh_list()
                     self.open_internal_editor(path)
                 else:
-                    path.mkdir(exist_ok=True) # ЛОГИКА СОЗДАНИЯ ПАПКИ
+                    path.mkdir(exist_ok=True)
                     self.refresh_list()
-            except Exception as e:
-                print(f"Error: {e}")
+            except Exception as e: print(e)
         self.hide_overlay()
 
     def open_internal_editor(self, path):
@@ -228,26 +238,52 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         full_path = self.current_dir / name
         is_dir = full_path.is_dir()
         row = QFrame()
-        row.setFixedHeight(40)
-        row.setStyleSheet("QFrame { background: white; border-bottom: 1px solid #f0f0f0; }")
+        row.setFixedHeight(35)
+        row.setStyleSheet("QFrame { background: white; border-bottom: 1px solid #f0f0f0; } QFrame:hover { background: #f9f9fb; }")
         l = QHBoxLayout(row)
+        l.setContentsMargins(10, 0, 10, 0)
         
         type_mark = "[DIR] " if is_dir else "[FILE]"
         name_btn = QPushButton(f"{type_mark} {name}")
-        name_btn.setStyleSheet("text-align: left; border: none; color: black; font-size: 13px;")
+        name_btn.setStyleSheet("text-align: left; border: none; color: black; font-size: 13px; font-weight: normal;")
         
-        if is_dir: name_btn.clicked.connect(lambda: self.enter_dir(full_path))
-        else: name_btn.clicked.connect(lambda: self.open_internal_editor(full_path))
+        if is_dir: 
+            name_btn.clicked.connect(lambda: self.enter_dir(full_path))
+        else: 
+            # Запуск .py как приложения или открытие в редакторе
+            if name.endswith(".py"):
+                name_btn.clicked.connect(lambda: self.run_py_file(full_path))
+            else:
+                name_btn.clicked.connect(lambda: self.open_internal_editor(full_path))
         
         l.addWidget(name_btn)
         l.addStretch()
         
         del_btn = QPushButton("X")
-        del_btn.setFixedSize(25, 25)
-        del_btn.setStyleSheet("color: red; border: 1px solid red; border-radius: 4px;")
+        del_btn.setFixedSize(22, 22)
+        del_btn.setStyleSheet("color: red; border: 1px solid red; border-radius: 4px; font-weight: bold;")
         del_btn.clicked.connect(lambda: self.delete_item(full_path))
         l.addWidget(del_btn)
         self.list_layout.addWidget(row)
+
+    def run_py_file(self, path):
+        """Метод для динамического запуска Python приложений"""
+        try:
+            spec = importlib.util.spec_from_file_location("dynamic_app", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            
+            # Ищем класс HyperApp в модуле
+            for attr in dir(module):
+                obj = getattr(module, attr)
+                if isinstance(obj, type) and issubclass(obj, MIOSORPIOS.HyperApp) and obj is not MIOSORPIOS.HyperApp:
+                    MIOSORPIOS.run(obj)
+                    return
+            
+            # Если это обычный скрипт
+            os.system(f'python "{path}"')
+        except Exception as e:
+            print(f"Exec Error: {e}")
 
     def enter_dir(self, path):
         if path.exists() and path.is_dir():
