@@ -1,0 +1,12 @@
+{
+    "ui_icon_size": "\u041c\u0430\u043b\u0435\u043d\u044c\u043a\u0438\u0435",
+    "ui_accent_color": "\u0421\u0438\u043d\u0438\u0439",
+    "disp_hz": "60 Hz",
+    "disp_orient": "\u0410\u043b\u044c\u0431\u043e\u043c\u043d\u0430\u044f",
+    "snd_device": "\u0414\u0438\u043d\u0430\u043c\u0438\u043a\u0438",
+    "kb_layout": "RU",
+    "ui_opacity": 0,
+    "disp_brightness": 68,
+    "disp_night_val": 0,
+    "snd_master": 49
+}

@@ -14,7 +14,7 @@ try:
     if hasattr(shell, 'launch_system'):
         shell.launch_system(BASE)
     else:
-        print("KERNEL PANIC: Function 'launch_system' not found in shell.py")
+        print("KERNEL PANIC: Function 'launch_system' not found in shell.py ПИЗДЕЦ ПОНИМАЕШЬ")
 except Exception as e:
     print(f"BOOT ERROR: {e}")
     import traceback

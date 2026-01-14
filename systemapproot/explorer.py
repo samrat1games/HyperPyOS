@@ -1,72 +1,100 @@
 import sys, os, shutil
 from pathlib import Path
 from PyQt6.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QFrame, QScrollArea, QWidget, QMessageBox, QGridLayout)
-from PyQt6.QtGui import QPixmap, QFont
+                             QFrame, QScrollArea, QWidget, QMessageBox, 
+                             QLineEdit, QTextEdit)
+from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 
 CURRENT_FILE = Path(__file__).resolve()
-PROJECT_ROOT = CURRENT_FILE.parent.parent
+PROJECT_ROOT = CURRENT_FILE.parent.parent 
 sys.path.insert(0, str(PROJECT_ROOT / "models" / "apps"))
+
 import MIOSORPIOS
 
 class OrangeExplorer(MIOSORPIOS.HyperApp):
     def __init__(self):
-        super().__init__(title="Orange Explorer")
-        self.setFixedSize(850, 600) # Увеличили размер окна
-        self.base_path = PROJECT_ROOT / "files"
+        super().__init__(title="Orange Explorer Pro")
+        self.setFixedSize(900, 650)
+        self.base_path = PROJECT_ROOT 
         self.current_dir = self.base_path
+        
         self.init_ui()
+        self.init_overlays() 
         self.refresh_list()
 
     def init_ui(self):
         self.content.setStyleSheet("background-color: #ffffff;")
+        self.layout_container = QWidget(self.content)
+        self.layout_container.setGeometry(0, 0, 900, 650)
         
-        # Главный горизонтальный макет (Боковая панель + Контент)
-        self.main_layout = QHBoxLayout(self.content)
+        self.main_layout = QHBoxLayout(self.layout_container)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
-        # 1. БОКОВАЯ ПАНЕЛЬ (SIDEBAR)
+        # --- 1. SIDEBAR ---
         self.sidebar = QFrame()
         self.sidebar.setFixedWidth(180)
         self.sidebar.setStyleSheet("""
-            QFrame { 
-                background-color: #f2f2f7; 
-                border-right: 1px solid #d1d1d6; 
-                border-bottom-left-radius: 18px; 
+            QFrame { background-color: #f2f2f7; border-right: 1px solid #d1d1d6; }
+            QPushButton { 
+                text-align: left; padding: 10px; border: none; 
+                color: #000000; font-size: 13px; background: transparent;
             }
+            QPushButton:hover { background-color: #e5e5ea; }
         """)
-        side_layout = QVBoxLayout(self.sidebar)
-        side_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        # Кнопки быстрого доступа
-        self.add_side_btn(side_layout, "􀈕 Файлы", self.base_path)
-        self.add_side_btn(side_layout, "􀎠 Система", self.base_path / "HyperPyOS")
-        self.add_side_btn(side_layout, "􀉤 Юзер", self.base_path / "user")
         
+        side_layout = QVBoxLayout(self.sidebar)
+        side_layout.setContentsMargins(5, 20, 5, 10)
+
+        self.add_side_btn(side_layout, "[ ROOT ]", self.base_path)
+        self.add_side_btn(side_layout, "[ FILES ]", self.base_path / "files")
+        
+        side_layout.addStretch()
+
+        # КНОПКИ СОЗДАНИЯ (Теперь с черным текстом)
+        action_btn_style = """
+            QPushButton { 
+                padding: 10px; border-radius: 6px; font-weight: bold; 
+                color: #000000; /* ЧЕРНЫЙ ТЕКСТ */
+                border: 1px solid rgba(0,0,0,0.1); 
+            }
+        """
+
+        self.btn_new_file = QPushButton("NEW FILE")
+        self.btn_new_file.setStyleSheet(action_btn_style + "background: #007aff;")
+        self.btn_new_file.clicked.connect(lambda: self.show_input_overlay("FILE"))
+        
+        self.btn_new_folder = QPushButton("NEW FOLDER")
+        self.btn_new_folder.setStyleSheet(action_btn_style + "background: #5856d6;")
+        self.btn_new_folder.clicked.connect(lambda: self.show_input_overlay("FOLDER"))
+        
+        side_layout.addWidget(self.btn_new_file)
+        side_layout.addWidget(self.btn_new_folder)
         self.main_layout.addWidget(self.sidebar)
 
-        # 2. ПРАВАЯ ЧАСТЬ (КОНТЕНТ)
+        # --- 2. CONTENT AREA ---
         right_widget = QWidget()
         self.right_layout = QVBoxLayout(right_widget)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Верхняя панель управления (Toolbar)
-        toolbar = QHBoxLayout()
-        self.back_btn = QPushButton("􀄪")
-        self.back_btn.setFixedSize(35, 35)
-        self.back_btn.setStyleSheet("background: transparent; font-size: 18px; color: #007aff; border: none;")
+        toolbar = QFrame()
+        toolbar.setFixedHeight(50)
+        toolbar.setStyleSheet("background: white; border-bottom: 1px solid #e0e0e0;")
+        t_layout = QHBoxLayout(toolbar)
+        
+        self.back_btn = QPushButton("< BACK")
+        self.back_btn.setStyleSheet("border: none; font-weight: bold; color: #007aff;")
         self.back_btn.clicked.connect(self.go_back)
         
-        self.path_lbl = QLabel("/files")
-        self.path_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #1c1c1e;")
+        self.path_lbl = QLabel("/")
+        self.path_lbl.setStyleSheet("font-family: 'Consolas'; color: #333; font-size: 12px;")
         
-        toolbar.addWidget(self.back_btn)
-        toolbar.addWidget(self.path_lbl)
-        toolbar.addStretch()
-        self.right_layout.addLayout(toolbar)
+        t_layout.addWidget(self.back_btn)
+        t_layout.addWidget(self.path_lbl)
+        t_layout.addStretch()
+        self.right_layout.addWidget(toolbar)
 
-        # Область прокрутки для файлов
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("border: none; background: white;")
@@ -74,89 +102,155 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
         self.list_widget = QWidget()
         self.list_layout = QVBoxLayout(self.list_widget)
         self.list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.list_layout.setSpacing(0)
         
         self.scroll.setWidget(self.list_widget)
         self.right_layout.addWidget(self.scroll)
-        
-        # Статус-бар внизу
-        self.status_bar = QLabel("Элементов: 0")
-        self.status_bar.setStyleSheet("color: #8e8e93; font-size: 11px; padding: 5px;")
-        self.right_layout.addWidget(self.status_bar)
-
         self.main_layout.addWidget(right_widget)
+
+    def init_overlays(self):
+        self.overlay_bg = QFrame(self.content)
+        self.overlay_bg.setGeometry(0, 0, 900, 650)
+        self.overlay_bg.setStyleSheet("background: rgba(0, 0, 0, 0.6);")
+        self.overlay_bg.hide()
+
+        self.input_panel = QFrame(self.content)
+        self.input_panel.setFixedSize(320, 160)
+        self.input_panel.move(290, 245)
+        self.input_panel.setStyleSheet("""
+            QFrame { background: #1c1c1e; border-radius: 15px; border: 1px solid #3a3a3c; }
+            QLabel { color: white; border: none; font-weight: bold; }
+            QLineEdit { background: #2c2c2e; color: white; padding: 8px; border-radius: 6px; }
+        """)
+        self.input_panel.hide()
+        
+        ip_layout = QVBoxLayout(self.input_panel)
+        self.ip_title = QLabel("CREATE NEW")
+        self.ip_input = QLineEdit()
+        
+        btn_box = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        ok_btn.setStyleSheet("background: #0a84ff; color: white; font-weight: bold; border-radius: 6px; padding: 6px;")
+        ok_btn.clicked.connect(self.process_input_overlay)
+        
+        cancel_btn = QPushButton("CANCEL")
+        cancel_btn.setStyleSheet("background: #3a3a3c; color: white; border-radius: 6px; padding: 6px;")
+        cancel_btn.clicked.connect(self.hide_overlay)
+        
+        btn_box.addWidget(cancel_btn)
+        btn_box.addWidget(ok_btn)
+        
+        ip_layout.addWidget(self.ip_title)
+        ip_layout.addWidget(self.ip_input)
+        ip_layout.addLayout(btn_box)
+
+        self.editor_panel = QFrame(self.content)
+        self.editor_panel.setGeometry(50, 50, 800, 550)
+        self.editor_panel.setStyleSheet("background: #1e1e1e; border-radius: 12px; border: 2px solid #333;")
+        self.editor_panel.hide()
+        
+        ed_layout = QVBoxLayout(self.editor_panel)
+        self.ed_text = QTextEdit()
+        self.ed_text.setStyleSheet("color: #d4d4d4; font-family: 'Consolas'; border: none; font-size: 14px;")
+        self.ed_save_btn = QPushButton("SAVE AND CLOSE")
+        self.ed_save_btn.setStyleSheet("background: #28a745; color: white; padding: 10px; font-weight: bold;")
+        
+        ed_layout.addWidget(self.ed_text)
+        ed_layout.addWidget(self.ed_save_btn)
+
+    def show_input_overlay(self, mode):
+        self.input_mode = mode
+        self.ip_title.setText(f"NEW {mode}")
+        self.ip_input.clear()
+        self.overlay_bg.show()
+        self.input_panel.show()
+        self.input_panel.raise_()
+        self.ip_input.setFocus()
+
+    def process_input_overlay(self):
+        name = self.ip_input.text().strip()
+        if name:
+            try:
+                path = self.current_dir / name
+                if self.input_mode == "FILE":
+                    path.touch()
+                    self.refresh_list()
+                    self.open_internal_editor(path)
+                else:
+                    path.mkdir(exist_ok=True) # ЛОГИКА СОЗДАНИЯ ПАПКИ
+                    self.refresh_list()
+            except Exception as e:
+                print(f"Error: {e}")
+        self.hide_overlay()
+
+    def open_internal_editor(self, path):
+        self.current_editing_path = path
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                self.ed_text.setPlainText(f.read())
+        except: self.ed_text.setPlainText("")
+        self.overlay_bg.show()
+        self.editor_panel.show()
+        self.editor_panel.raise_()
+        try: self.ed_save_btn.clicked.disconnect()
+        except: pass
+        self.ed_save_btn.clicked.connect(self.save_internal_editor)
+
+    def save_internal_editor(self):
+        try:
+            with open(self.current_editing_path, 'w', encoding='utf-8') as f:
+                f.write(self.ed_text.toPlainText())
+        except: pass
+        self.hide_overlay()
+
+    def hide_overlay(self):
+        self.overlay_bg.hide()
+        self.input_panel.hide()
+        self.editor_panel.hide()
 
     def add_side_btn(self, layout, text, path):
         btn = QPushButton(text)
-        btn.setStyleSheet("""
-            QPushButton { 
-                text-align: left; padding: 10px; border: none; 
-                border-radius: 8px; color: #1c1c1e; font-weight: 500; 
-            }
-            QPushButton:hover { background-color: #e5e5ea; }
-        """)
         btn.clicked.connect(lambda: self.enter_dir(path))
         layout.addWidget(btn)
 
     def refresh_list(self):
         for i in reversed(range(self.list_layout.count())): 
-            self.list_layout.itemAt(i).widget().setParent(None)
-
-        self.path_lbl.setText(f"OrangeOS › {self.current_dir.name}")
-
+            w = self.list_layout.itemAt(i).widget()
+            if w: w.setParent(None)
+        self.path_lbl.setText(f" PATH: {self.current_dir}")
         try:
             items = sorted(os.listdir(self.current_dir))
-            self.status_bar.setText(f"Элементов: {len(items)}")
-            
             for item in items:
                 self.create_item_row(item)
-        except Exception as e:
-            self.list_layout.addWidget(QLabel(f"Ошибка: {e}"))
+        except: pass
 
     def create_item_row(self, name):
         full_path = self.current_dir / name
         is_dir = full_path.is_dir()
-        
         row = QFrame()
-        row.setStyleSheet("""
-            QFrame { background: #ffffff; border-bottom: 1px solid #f2f2f7; }
-            QFrame:hover { background: #f9f9fb; }
-        """)
+        row.setFixedHeight(40)
+        row.setStyleSheet("QFrame { background: white; border-bottom: 1px solid #f0f0f0; }")
         l = QHBoxLayout(row)
         
-        # Красивая иконка
-        icon_lbl = QLabel("📁" if is_dir else "📄")
-        icon_lbl.setStyleSheet("font-size: 20px; border: none;")
+        type_mark = "[DIR] " if is_dir else "[FILE]"
+        name_btn = QPushButton(f"{type_mark} {name}")
+        name_btn.setStyleSheet("text-align: left; border: none; color: black; font-size: 13px;")
         
-        name_btn = QPushButton(name)
-        name_btn.setStyleSheet("text-align: left; border: none; color: black; font-weight: 500; font-size: 13px;")
-        if is_dir:
-            name_btn.clicked.connect(lambda: self.enter_dir(full_path))
+        if is_dir: name_btn.clicked.connect(lambda: self.enter_dir(full_path))
+        else: name_btn.clicked.connect(lambda: self.open_internal_editor(full_path))
         
-        l.addWidget(icon_lbl)
         l.addWidget(name_btn)
         l.addStretch()
-
-        # Проверка защиты Orange System
-        is_protected = any(x in str(full_path) for x in ["HyperPyOS", "user", "fonts"])
         
-        if is_protected:
-            lock = QLabel("􀎠 System")
-            lock.setStyleSheet("color: #ff9500; font-weight: bold; font-size: 10px; border: none;")
-            l.addWidget(lock)
-        else:
-            del_btn = QPushButton("Удалить")
-            del_btn.setFixedSize(75, 25)
-            del_btn.setStyleSheet("""
-                QPushButton { background: #f2f2f7; color: #ff3b30; border-radius: 6px; font-weight: bold; }
-                QPushButton:hover { background: #ff3b30; color: white; }
-            """)
-            del_btn.clicked.connect(lambda ch, p=full_path: self.delete_item(p))
-            l.addWidget(del_btn)
-            
+        del_btn = QPushButton("X")
+        del_btn.setFixedSize(25, 25)
+        del_btn.setStyleSheet("color: red; border: 1px solid red; border-radius: 4px;")
+        del_btn.clicked.connect(lambda: self.delete_item(full_path))
+        l.addWidget(del_btn)
         self.list_layout.addWidget(row)
 
     def enter_dir(self, path):
-        if path.exists():
+        if path.exists() and path.is_dir():
             self.current_dir = path
             self.refresh_list()
 
@@ -166,13 +260,11 @@ class OrangeExplorer(MIOSORPIOS.HyperApp):
             self.refresh_list()
 
     def delete_item(self, path):
-        if QMessageBox.question(self, "OrangeOS", f"Удалить {path.name}?") == QMessageBox.StandardButton.Yes:
-            try:
-                if path.is_dir(): shutil.rmtree(path)
-                else: os.remove(path)
-                self.refresh_list()
-            except Exception as e:
-                QMessageBox.critical(self, "Доступ запрещен", f"{e}")
+        try:
+            if path.is_dir(): shutil.rmtree(path)
+            else: os.remove(path)
+            self.refresh_list()
+        except: pass
 
 if __name__ == "__main__":
     MIOSORPIOS.run(OrangeExplorer)
