@@ -9,12 +9,12 @@ sys.path.insert(0, str(BASE))
 print(f"[BOOT] BASE PATH: {BASE}")
 
 try:
-    from datasystemroot import shell
-    # Проверяем наличие функции перед запуском
-    if hasattr(shell, 'launch_system'):
-        shell.launch_system(BASE)
+    # Запуск lockscreen.py
+    lockscreen_path = BASE / "datasystemroot" / "lockscreen.py"
+    if lockscreen_path.exists():
+        os.system(f'python "{lockscreen_path}"')
     else:
-        print("KERNEL PANIC: Function 'launch_system' not found in shell.py ПИЗДЕЦ ПОНИМАЕШЬ")
+        print("LOCKSCREEN NOT FOUND")
 except Exception as e:
     print(f"BOOT ERROR: {e}")
     import traceback

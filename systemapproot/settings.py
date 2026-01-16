@@ -1,4 +1,4 @@
-import sys, os, subprocess
+import sys, os, subprocess, json
 from pathlib import Path
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import *
@@ -25,7 +25,6 @@ class SettingsApp(HyperApp):
         self.resize(900, 650)
         self.egg_clicks = 0
 
-        # ЧЕРНЫЙ ШРИФТ И ЧИСТЫЙ СТИЛЬ
         self.setStyleSheet("""
             QWidget { background-color: #ffffff; color: #000000; font-family: 'Segoe UI', sans-serif; }
             QListWidget { background-color: #f2f2f7; border: none; color: #000000; }
@@ -40,7 +39,7 @@ class SettingsApp(HyperApp):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
-        # САЙДБАР
+        # САЙДБАР (Убрали Экран блокировки)
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(200)
         self.sidebar.addItems(["Сеть", "Обои", "О системе"])
@@ -53,7 +52,7 @@ class SettingsApp(HyperApp):
         self.sidebar.currentRowChanged.connect(self.pages.setCurrentIndex)
 
     def init_pages(self):
-        # 1. СЕТЬ (УЛЬТРА-СКАНЕР)
+        # 1. СЕТЬ
         p1 = QWidget(); l1 = QVBoxLayout(p1)
         l1.setContentsMargins(30, 20, 30, 20)
         l1.addWidget(QLabel("Беспроводные интерфейсы", styleSheet="font-size: 24px; font-weight: bold;"))
@@ -73,7 +72,6 @@ class SettingsApp(HyperApp):
         wf_lay.addWidget(btn_scan)
         l1.addWidget(wf_box)
 
-        # Bluetooth
         bt_box = QGroupBox("Bluetooth")
         bt_lay = QVBoxLayout(bt_box)
         self.bt_info = QLabel("Статус: Не проверен")
@@ -86,7 +84,7 @@ class SettingsApp(HyperApp):
         l1.addStretch()
         self.pages.addWidget(p1)
 
-        # 2. ОБОИ (ВОЗВРАЩАЕМ ТВОЙ КОД)
+        # 2. ОБОИ
         p2 = QWidget(); l2 = QVBoxLayout(p2)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -122,14 +120,12 @@ class SettingsApp(HyperApp):
         nets = []
         try:
             if sys.platform == "win32":
-                # Режим BSSID заставляет Windows видеть КАЖДУЮ частоту отдельно
                 out = subprocess.check_output("netsh wlan show networks mode=bssid", shell=True).decode("cp866", errors="ignore")
                 for line in out.split("\n"):
                     if "SSID" in line and ":" in line:
                         n = line.split(":", 1)[1].strip()
                         if n and n not in nets: nets.append(n)
             elif sys.platform == "linux":
-                # Реальная команда для Linux
                 out = subprocess.check_output("nmcli -t -f SSID dev wifi", shell=True).decode("utf-8")
                 nets = list(set([l.strip() for l in out.split("\n") if l.strip()]))
 

@@ -5,7 +5,6 @@ import os
 import sys
 import subprocess
 import ctypes
-import logging
 from pathlib import Path
 from datetime import datetime
 
@@ -33,39 +32,33 @@ class HyperPyOS_Shell(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        # Настройка графического интерфейса
         self.attributes("-fullscreen", True)
         self.overrideredirect(True)
         self.config(bg="#000000")
         
-        # Полное скрытие интерфейса Windows
+        # Скрываем Windows Taskbar
         self.toggle_windows_ui(False)
         
-        # Кэш
         self.image_cache = {}
         self.launchpad_win = None
         
-        # Только твои закрепленные приложения (без системных из Win)
+        # Закрепленные приложения (названия должны совпадать с заголовками окон)
         self.pinned_apps = [
             {"name": "Explorer", "file": "explorer.py", "icon": "explorer.png"},
             {"name": "Terminal", "file": "terminal.py", "icon": "terminal.png"},
             {"name": "Browser", "file": "browser.py", "icon": "browser.png"}
         ]
         
-        # Фоновые слои
         self.canvas = tk.Canvas(self, highlightthickness=0, bg="#000000", bd=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
         self.bg_id = self.canvas.create_image(0, 0, anchor="nw")
         
         self.apply_wallpaper()
         self.init_ui_elements()
-        
-        # Запуск служб мониторинга
         self.start_daemons()
         
         self.bind("<Escape>", lambda e: self.shutdown_dialog())
 
-    # --- СИСТЕМНОЕ УПРАВЛЕНИЕ ---
     def toggle_windows_ui(self, show):
         handle = user32.FindWindowW("Shell_TrayWnd", None)
         user32.ShowWindow(handle, 5 if show else 0)
@@ -79,71 +72,95 @@ class HyperPyOS_Shell(tk.Tk):
         path = WALLPAPER_DIR / img_name
         if not path.exists(): path = WALLPAPER_DIR / "bg.jpg"
         
-        img = Image.open(path).resize((self.winfo_screenwidth(), self.winfo_screenheight()), Image.Resampling.LANCZOS)
-        self.tk_wall = ImageTk.PhotoImage(img)
-        self.canvas.itemconfig(self.bg_id, image=self.tk_wall)
+        try:
+            img = Image.open(path).resize((self.winfo_screenwidth(), self.winfo_screenheight()), Image.Resampling.LANCZOS)
+            self.tk_wall = ImageTk.PhotoImage(img)
+            self.canvas.itemconfig(self.bg_id, image=self.tk_wall)
+        except:
+            pass
 
-    def start_daemons(self):
-        self.clock_loop()
-        self.dock_monitor_loop()
-
-    # --- ВИЗУАЛЬНЫЕ КОМПОНЕНТЫ ---
     def init_ui_elements(self):
-        # Верхняя панель
         self.top_bar = tk.Frame(self, height=32, bg="#0d0d0d")
         self.top_bar.place(x=0, y=0, relwidth=1)
         
-        tk.Label(self.top_bar, text="HyperPyOS Core", fg="#00a2ff", bg="#0d0d0d", 
-                 font=("Segoe UI", 9, "bold")).pack(side="left", padx=15)
+        tk.Button(self.top_bar, text="H", fg="#ff6600", bg="#0d0d0d", 
+                  font=("Arial", 14, "bold"), bd=0, activebackground="#333", 
+                  command=self.show_menu).pack(side="left", padx=15)
         
         self.clock_lbl = tk.Label(self.top_bar, text="", fg="white", bg="#0d0d0d", font=("Segoe UI", 9))
         self.clock_lbl.pack(side="right", padx=15)
 
-        # Док-станция
         self.dock_frame = tk.Frame(self, bg="#1a1a1a", padx=10, pady=5)
         self.dock_frame.place(relx=0.5, rely=0.98, anchor="s")
         self.dock_inner = tk.Frame(self.dock_frame, bg="#1a1a1a")
         self.dock_inner.pack()
 
+    def show_menu(self):
+        menu_win = tk.Toplevel(self)
+        menu_win.geometry("200x160+10+35")
+        menu_win.config(bg="#0d0d0d")
+        menu_win.overrideredirect(True)
+        menu_win.attributes("-topmost", True)
+        
+        btns = [("App Store", "appstore.py"), ("Settings", "settings.py")]
+        for name, file in btns:
+            tk.Button(menu_win, text=name, fg="white", bg="#0d0d0d", font=("Arial", 11), 
+                      bd=0, activebackground="#333", anchor="w", padx=15,
+                      command=lambda f=file: [self.launch_app(f), menu_win.destroy()]).pack(fill="x")
+        
+        tk.Button(menu_win, text="Shutdown", fg="#ff3b30", bg="#0d0d0d", font=("Arial", 11, "bold"), 
+                  bd=0, activebackground="#333", anchor="w", padx=15,
+                  command=lambda: [menu_win.destroy(), self.shutdown_dialog()]).pack(fill="x", pady=5)
+        
+        menu_win.bind("<FocusOut>", lambda e: menu_win.destroy())
+
+    def launch_app(self, app_file):
+        path = SYS_APPS_DIR / app_file
+        if path.exists(): subprocess.Popen([sys.executable, str(path)])
+
+    def start_daemons(self):
+        self.clock_loop()
+        self.dock_monitor_loop()
+
     def clock_loop(self):
         self.clock_lbl.config(text=datetime.now().strftime("%H:%M:%S"))
         self.after(1000, self.clock_loop)
 
-    # --- УМНЫЙ МОНИТОРИНГ ТВОИХ ПРИЛОЖЕНИЙ ---
+    # --- ИСПРАВЛЕННЫЙ МОНИТОРИНГ (Работает со скрытыми окнами) ---
     def dock_monitor_loop(self):
-        """Сканирует только твои процессы, игнорируя системные окна Windows"""
         if not HAS_GW: return
 
+        # Список имен твоих программ на основе файлов .py
+        app_names = [p.stem.lower() for p in list(SYS_APPS_DIR.glob("*.py")) + list(APPS_DIR.glob("*.py"))]
+        
+        # Получаем ВСЕ окна в системе (включая свернутые)
+        all_wins = gw.getAllWindows()
+        
+        # Фильтруем те, что принадлежат твоей ОС (по заголовку)
+        active_scripts = [w for w in all_wins if w.title.lower() in app_names]
+
+        # Очищаем Dock для обновления
         for child in self.dock_inner.winfo_children():
             child.destroy()
 
-        # 1. Синяя S
         self.draw_dock_icon("S", self.toggle_launchpad, is_start=True)
 
-        # 2. Список твоих существующих скриптов (Белый список)
-        # Мы смотрим только те окна, которые называются как твои файлы
-        my_apps = [p.stem.lower() for p in list(SYS_APPS_DIR.glob("*.py")) + list(APPS_DIR.glob("*.py"))]
-        
-        # Получаем все открытые окна
-        all_windows = gw.getAllWindows()
-        # Фильтруем: оставляем только те, что входят в наш список скриптов
-        active_scripts = [w for w in all_windows if w.visible and w.title.lower() in my_apps]
+        processed_titles = []
 
-        processed_names = []
-
-        # 3. Рисуем закрепленные
+        # Рисуем закрепленные
         for app in self.pinned_apps:
-            is_open = any(app["name"].lower() == w.title.lower() for w in active_scripts)
-            self.draw_dock_icon(app["icon"], lambda a=app: self.app_control(a), active=is_open)
-            processed_names.append(app["name"].lower())
+            # Ищем среди ВСЕХ окон совпадение по имени (даже если оно свернуто)
+            is_running = any(app["name"].lower() == w.title.lower() for w in active_scripts)
+            self.draw_dock_icon(app["icon"], lambda a=app: self.app_control(a), active=is_running)
+            processed_titles.append(app["name"].lower())
 
-        # 4. Рисуем запущенные, которых нет в закрепе (например, из папки /apps)
+        # Рисуем динамические (те, что запущены, но не закреплены)
         for w in active_scripts:
             name = w.title.lower()
-            if name not in processed_names:
+            if name not in processed_titles:
                 icon_file = f"{name}.png"
                 self.draw_dock_icon(icon_file, lambda t=w.title: self.focus_win(t), active=True)
-                processed_names.append(name)
+                processed_titles.append(name)
 
         self.after(1200, self.dock_monitor_loop)
 
@@ -152,49 +169,49 @@ class HyperPyOS_Shell(tk.Tk):
         f.pack(side="left", padx=4)
 
         if is_start:
-            btn = tk.Button(f, text="S", fg="#00a2ff", bg="#1a1a1a", font=("Arial", 18, "bold"),
-                           bd=0, activebackground="#333", command=command)
+            btn = tk.Button(f, text="S", fg="#00a2ff", bg="#1a1a1a", font=("Arial", 18, "bold"), bd=0, command=command)
         else:
             p = ICON_DIR / icon_res
-            # Если иконки нет - ставим дефолтную иконку скрипта (explorer.png)
             if not p.exists(): p = ICON_DIR / "explorer.png"
-            
             try:
                 img = Image.open(p).resize((36, 36), Image.Resampling.LANCZOS)
                 itk = ImageTk.PhotoImage(img)
                 self.image_cache[icon_res] = itk
-                btn = tk.Button(f, image=itk, bg="#1a1a1a", bd=0, activebackground="#333", command=command)
+                btn = tk.Button(f, image=itk, bg="#1a1a1a", bd=0, command=command)
             except:
                 btn = tk.Button(f, text="?", fg="white", bg="#333", width=4, bd=0, command=command)
         
         btn.pack()
-        # Оранжевый индикатор
+        # Оранжевая полоска — индикатор активности
         indicator = tk.Frame(f, bg="#ff6600" if active else "#1a1a1a", height=2, width=22)
         indicator.pack(pady=(2, 0))
 
-    # --- ЛОГИКА ОКОН ---
     def app_control(self, app):
-        wins = [w for w in gw.getWindowsWithTitle(app["name"]) if w.visible]
+        target = app["name"]
+        # Ищем окно даже среди невидимых/свернутых
+        wins = [w for w in gw.getWindowsWithTitle(target) if w.title.lower() == target.lower()]
         if wins:
-            w = wins[0]
-            if w.isMinimized: w.restore()
-            w.activate()
+            self.focus_win(wins[0].title)
         else:
             subprocess.Popen([sys.executable, str(SYS_APPS_DIR / app["file"])])
 
     def focus_win(self, title):
-        wins = [w for w in gw.getWindowsWithTitle(title) if w.visible]
+        wins = gw.getWindowsWithTitle(title)
         if wins:
-            if wins[0].isMinimized: wins[0].restore()
-            wins[0].activate()
+            w = wins[0]
+            # ПРИНУДИТЕЛЬНОЕ ВОССТАНОВЛЕНИЕ СКРЫТОГО ОКНА
+            try:
+                if w.isMinimized: w.restore()
+                w.activate()
+            except:
+                pass
 
-    # --- МЕНЮ ПРИЛОЖЕНИЙ ---
     def toggle_launchpad(self):
         if self.launchpad_win:
             self.launchpad_win.destroy()
             self.launchpad_win = None
             return
-
+        
         self.launchpad_win = tk.Toplevel(self)
         self.launchpad_win.attributes("-fullscreen", True, "-topmost", True)
         self.launchpad_win.config(bg="#050505")
@@ -208,7 +225,7 @@ class HyperPyOS_Shell(tk.Tk):
         apps = list(SYS_APPS_DIR.glob("*.py")) + list(APPS_DIR.glob("*.py"))
         r, c = 0, 0
         for path in apps:
-            if path.name.startswith("__"): continue
+            if path.name.startswith("__") or path.name == os.path.basename(__file__): continue
             item = tk.Frame(grid, bg="#050505", padx=25, pady=25)
             item.grid(row=r, column=c)
             
@@ -217,7 +234,7 @@ class HyperPyOS_Shell(tk.Tk):
             
             img = Image.open(icon_p).resize((60, 60), Image.Resampling.LANCZOS)
             itk = ImageTk.PhotoImage(img)
-            btn = tk.Button(item, image=itk, bg="#050505", bd=0, command=lambda p=path: self.launch_script(p))
+            btn = tk.Button(item, image=itk, bg="#050505", bd=0, command=lambda p=path: [self.launch_app(p.name), self.toggle_launchpad()])
             btn.image = itk
             btn.pack()
             tk.Label(item, text=path.stem, fg="white", bg="#050505").pack(pady=5)
@@ -225,19 +242,11 @@ class HyperPyOS_Shell(tk.Tk):
             c += 1
             if c > 5: c = 0; r += 1
 
-    def launch_script(self, path):
-        subprocess.Popen([sys.executable, str(path)])
-        self.toggle_launchpad()
-
     def shutdown_dialog(self):
-        if messagebox.askyesno("HyperPyOS", "Выйти в Windows?"):
+        if messagebox.askyesno("HyperPyOS", "Выключить систему?"):
             self.toggle_windows_ui(True)
-            self.destroy()
-            sys.exit()
-
-def launch_system(base_path=None):
-    app = HyperPyOS_Shell()
-    app.mainloop()
+            subprocess.run(["shutdown", "/s", "/t", "0"])
 
 if __name__ == "__main__":
-    launch_system()
+    app = HyperPyOS_Shell()
+    app.mainloop()
